@@ -1,7 +1,7 @@
 package com.netatmo.gitlabplugin.retrofit
 
 
-import com.netatmo.gitlabplugin.model.Project
+import com.netatmo.gitlabplugin.model.GitlabProject
 import retrofit2.http.GET
 
 /**
@@ -10,5 +10,5 @@ import retrofit2.http.GET
 interface GitlabService {
 
     @GET("projects")
-    suspend fun getProjectList(): List<Project>
+    suspend fun getProjectList(): List<GitlabProject>
 }

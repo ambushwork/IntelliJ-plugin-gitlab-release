@@ -25,15 +25,8 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-
+        <!--Register extensions here-->
+        <toolWindow id="Gitlab Projects" secondary="true" anchor="right"
+                    factoryClass="com.netatmo.gitlabplugin.ui.GitlabProjectsWindow"/>
     </extensions>
-
-    <actions>
-        <!--Register actions here-->
-        <action id="com.netatmo.gitlabplugin.HelloAction"
-                class="com.netatmo.gitlabplugin.HelloAction" text="Test action"
-                description="First test action for my plugin">
-            <add-to-group group-id="ToolsMenu" anchor="first" />
-        </action>
-    </actions>
 </idea-plugin>

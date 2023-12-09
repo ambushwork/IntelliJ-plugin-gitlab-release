@@ -1,10 +1,10 @@
 package com.netatmo.gitlabplugin.ui
 
-import com.netatmo.gitlabplugin.model.ProjectNamespace
+import com.netatmo.gitlabplugin.model.Group
 import javax.swing.JComboBox
 
 class GroupSelector(
-    items: Array<ProjectNamespace>,
+    items: Array<Group>,
     onSelectListener: (Int) -> Unit
 ) : JComboBox<String>(items.map { it.name }.toTypedArray()) {
 

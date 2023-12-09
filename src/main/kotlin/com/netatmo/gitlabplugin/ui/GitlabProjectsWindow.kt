@@ -1,5 +1,6 @@
 package com.netatmo.gitlabplugin.ui
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
@@ -9,7 +10,7 @@ import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.PlatformIcons
 import com.netatmo.gitlabplugin.model.CompositeProject
 import com.netatmo.gitlabplugin.model.GitlabProject
-import com.netatmo.gitlabplugin.model.ProjectNamespace
+import com.netatmo.gitlabplugin.model.Group
 import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.viewmodel.MainWindowViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -18,6 +19,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import java.awt.BorderLayout
 import java.awt.Dimension
+import java.awt.FlowLayout
+import java.awt.event.MouseEvent
+import java.awt.event.MouseListener
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -53,7 +57,6 @@ class GitlabProjectsWindow : ToolWindowFactory {
         }
     }
 
-
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val content: Content = ContentFactory.getInstance().createContent(createContentPanel(), "", false)
         toolWindow.contentManager.addContent(content)
@@ -73,20 +76,66 @@ class GitlabProjectsWindow : ToolWindowFactory {
 
     private fun setupToolbar(contentJPanel: JPanel): JToolBar {
         // Create the toolbar
-        val toolBar = JToolBar()
-        contentJPanel.add(toolBar, BorderLayout.PAGE_START)
+        val toolBar = JToolBar().apply {
+
+        }
+        val topLine = JPanel(FlowLayout(FlowLayout.LEFT))
+
         // Add an icon to the toolbar
-        val icon = PlatformIcons.SYNCHRONIZE_ICON // Replace with the actual path
-        val iconButton = JButton(icon)
-        iconButton.addActionListener {
+        val refreshButton = JButton(PlatformIcons.SYNCHRONIZE_ICON)
+        refreshButton.addActionListener {
             viewModel.requestCompositeProjects()
         }
-        toolBar.add(iconButton)
-        toolBar.add(selectorContent)
+        val favoriteButton = JButton(AllIcons.Actions.AddToDictionary)
+        topLine.add(refreshButton)
+        topLine.add(favoriteButton)
+
+
+        val searchField = JTextField(15)
+
+        val bottomLine = JPanel(FlowLayout(FlowLayout.LEFT))
+        bottomLine.add(JLabel("Group: "))
+        bottomLine.add(selectorContent)
+        bottomLine.add(JLabel("Search: "))
+        bottomLine.add(searchField)
+        bottomLine.add(JLabel(AllIcons.Actions.Search).apply {
+            this.addMouseListener(object : MouseListener {
+                override fun mouseClicked(e: MouseEvent?) {
+                    viewModel.searchProjectInGroup(searchField.text)
+                }
+
+                override fun mousePressed(e: MouseEvent?) {
+                    // do nothing
+                }
+
+                override fun mouseReleased(e: MouseEvent?) {
+                    // do nothing
+                }
+
+                override fun mouseEntered(e: MouseEvent?) {
+                    // do nothing
+                }
+
+                override fun mouseExited(e: MouseEvent?) {
+                    // do nothing
+                }
+
+            })
+        })
+
+
+        val toolbarPanel = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.Y_AXIS)
+        }
+        toolbarPanel.add(topLine)
+        toolbarPanel.add(bottomLine)
+
+        contentPanel.add(toolbarPanel, BorderLayout.PAGE_START)
+
         return toolBar
     }
 
-    private fun updateSelector(groups: Set<ProjectNamespace>) {
+    private fun updateSelector(groups: List<Group>) {
         selectorContent.removeAll()
         val comboBox = GroupSelector(groups.toTypedArray()) {
             viewModel.changeGroup(it)

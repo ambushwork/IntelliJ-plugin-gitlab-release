@@ -1,11 +1,14 @@
 package com.netatmo.gitlabplugin.viewmodel
 
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
+import com.netatmo.gitlabplugin.repository.GroupsRepository
 import kotlinx.coroutines.flow.*
 
 class MainWindowViewModel {
 
     private val compositeProjectRepository: CompositeProjectRepository = CompositeProjectRepository()
+
+    private val groupsRepository: GroupsRepository = GroupsRepository()
 
     private val _selectedGroupState = MutableStateFlow<Int?>(null)
 
@@ -24,13 +27,26 @@ class MainWindowViewModel {
             group?.let {
                 projects.filter { it.gitlabProject.namespace.id == group }
             } ?: projects
+        }.onEach {
+            if (it.size < 20) {
+                _selectedGroupState.value?.let { groupId ->
+                    compositeProjectRepository.fetchNextPageByGroup(groupId)
+                }
+            }
         }
 
-    val groupStateFlow = compositeProjectFlow.map { projects ->
-        projects.map { it.gitlabProject.namespace }.toSet()
+    val groupStateFlow = groupsRepository.groupsFlow
+
+    internal fun requestCompositeProjects() {
+        compositeProjectRepository.fetch()
+        groupsRepository.fetchGroups()
     }
 
-    internal fun requestCompositeProjects() = compositeProjectRepository.fetch()
+    internal fun searchProjectInGroup(criteria: String) {
+        _selectedGroupState.value?.let {
+            compositeProjectRepository.searchProjectInGroup(criteria, it)
+        }
+    }
 
     internal fun changeGroup(groupId: Int) {
         _selectedGroupState.update {

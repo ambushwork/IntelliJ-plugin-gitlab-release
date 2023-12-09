@@ -1,31 +1,46 @@
 package com.netatmo.gitlabplugin.viewmodel
 
-import com.netatmo.gitlabplugin.repository.GitlabProjectNetworkRepository
-import com.netatmo.gitlabplugin.repository.GitlabProjectRepository
+import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import kotlinx.coroutines.flow.*
 
 class MainWindowViewModel {
 
-    private val repository: GitlabProjectRepository = GitlabProjectNetworkRepository()
+    private val compositeProjectRepository: CompositeProjectRepository = CompositeProjectRepository()
 
-    private val _selectedGroupState = MutableStateFlow<String?>(null)
+    private val _selectedGroupState = MutableStateFlow<Int?>(null)
 
-    val projectsStateFlow = repository.getProjects().combine(_selectedGroupState.asStateFlow()) { projects, group ->
-        group?.let {
-            projects.filter { it.namespace.name == group }
-        } ?: projects
+    private val _selectedRelease = MutableStateFlow<Pair<String, Int>?>(null)
+
+    val selectedRelease =
+        compositeProjectRepository.compositeProjectFlow.combine(_selectedRelease) { compositeProjects, pair ->
+            pair?.let {
+                compositeProjects
+                    .firstOrNull { it.gitlabProject.id == pair.second }?.projectReleases?.firstOrNull { it.name == pair.first }
+            }
+        }
+
+    val compositeProjectFlow = compositeProjectRepository.compositeProjectFlow
+        .combine(_selectedGroupState.asStateFlow()) { projects, group ->
+            group?.let {
+                projects.filter { it.gitlabProject.namespace.id == group }
+            } ?: projects
+        }
+
+    val groupStateFlow = compositeProjectFlow.map { projects ->
+        projects.map { it.gitlabProject.namespace }.toSet()
     }
 
-    val groupStateFlow = repository.getProjects().map { projects ->
-        projects.map { it.namespace }.toSet()
-    }
+    internal fun requestCompositeProjects() = compositeProjectRepository.fetch()
 
-
-    internal fun requestProjects() = repository.requestProjects()
-
-    internal fun changeGroup(group: String) {
+    internal fun changeGroup(groupId: Int) {
         _selectedGroupState.update {
-            group
+            groupId
+        }
+    }
+
+    internal fun selectRelease(projectId: Int, name: String) {
+        _selectedRelease.update {
+            Pair(name, projectId)
         }
     }
 }

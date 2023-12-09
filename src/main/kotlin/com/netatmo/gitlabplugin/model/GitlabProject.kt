@@ -9,5 +9,7 @@ import kotlinx.serialization.Serializable
 data class GitlabProject(
     val id: Int,
     val name: String,
-    val namespace: ProjectNamespace,
-)
+    val namespace: ProjectNamespace
+) {
+    override fun toString(): String = name
+}

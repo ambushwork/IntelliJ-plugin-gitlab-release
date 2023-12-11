@@ -15,10 +15,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import java.awt.BorderLayout
-import java.awt.Dimension
-import java.awt.FlowLayout
+import java.awt.*
+import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.net.URI
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -52,10 +52,11 @@ class GitlabProjectsWindow : ToolWindowFactory {
             }
         }
         CoroutineScope(Dispatchers.Default).launch {
-            viewModel.selectedRelease.collectLatest {
+            viewModel.detailState.collectLatest {
                 updateDetailPanel(it)
             }
         }
+
         CoroutineScope(Dispatchers.Default).launch {
             viewModel.pageFlow.collectLatest {
                 updatePageIndicator(it)
@@ -167,7 +168,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
         projects.forEach { compositeProject ->
             rootNode.add(DefaultMutableTreeNode(compositeProject.gitlabProject).apply {
                 compositeProject.projectReleases.forEach {
-                    this.add(DefaultMutableTreeNode(it.name))
+                    this.add(DefaultMutableTreeNode(it))
                 }
             })
         }
@@ -176,13 +177,22 @@ class GitlabProjectsWindow : ToolWindowFactory {
         val tree = Tree(rootNode).apply {
             addTreeSelectionListener {
                 val node = this.lastSelectedPathComponent as DefaultMutableTreeNode
-                val projectNode = node.parent as DefaultMutableTreeNode
-                projectNode.userObject.apply {
-                    if (this is GitlabProject) {
-                        val projectId = this.id
-                        viewModel.selectRelease(projectId, node.userObject as String)
+                when (val obj = node.userObject) {
+                    is ProjectRelease -> {
+                        val projectNode = node.parent as DefaultMutableTreeNode
+                        projectNode.userObject.apply {
+                            if (this is GitlabProject) {
+                                val projectId = this.id
+                                viewModel.selectRelease(projectId, node.userObject as ProjectRelease)
+                            }
+                        }
+                    }
+
+                    is GitlabProject -> {
+                        viewModel.selectProject(obj.id)
                     }
                 }
+
             }
         }
 
@@ -195,11 +205,54 @@ class GitlabProjectsWindow : ToolWindowFactory {
         contentPanel.repaint()
     }
 
-    private fun updateDetailPanel(projectRelease: ProjectRelease?) {
+    private fun updateDetailPanel(detailState: MainWindowViewModel.DetailState?) {
         detailContent.removeAll()
-        projectRelease?.let {
-            val label = JTextArea(it.description)
-            val jScrollPane = JScrollPane(label)
+        detailState?.let { state ->
+            val descriptionContent = JPanel().apply {
+                this.layout = BoxLayout(this, BoxLayout.Y_AXIS)
+            }
+            if (state.release != null) {
+                descriptionContent.add(JTextArea(state.release.description))
+            } else {
+                state.gitlabProject?.apply {
+
+                    val imageIcon =
+                        ImageIcon(this@GitlabProjectsWindow::class.java.getResource("/drawable/star.png"))
+                    val image: Image = imageIcon.image // transform it
+                    val newimg = image.getScaledInstance(20, 20, Image.SCALE_SMOOTH) // scale it the smooth way
+
+                    val title = JLabel(this.name)
+                    title.font = Font("Arial", Font.BOLD, 20)
+                    title.border = BorderFactory.createEmptyBorder(10, 10, 10, 10) // Add padding
+                    title.icon = ImageIcon(newimg)
+
+                    descriptionContent.add(title)
+                    val timestamp = JLabel("Updated at: ${this.updated_at}")
+                    timestamp.border = BorderFactory.createEmptyBorder(10, 10, 10, 10); // Add padding
+                    timestamp.alignmentX = Component.LEFT_ALIGNMENT
+                    descriptionContent.add(timestamp)
+
+                    val urlLabel = JLabel("<html><u>Open Repository</u></html>")
+                    urlLabel.foreground = Color.BLUE
+                    urlLabel.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    urlLabel.addMouseListener(object : MouseAdapter() {
+                        override fun mouseClicked(e: MouseEvent?) {
+                            try {
+                                Desktop.getDesktop().browse(URI(this@apply.web_url))
+                            } catch (ex: Exception) {
+                                ex.printStackTrace()
+                            }
+                        }
+                    })
+                    urlLabel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10); // Add padding
+                    urlLabel.alignmentX = Component.LEFT_ALIGNMENT
+                    descriptionContent.add(urlLabel)
+                    descriptionContent.alignmentX = Component.LEFT_ALIGNMENT
+                }
+
+            }
+
+            val jScrollPane = JScrollPane(descriptionContent)
             detailContent.add(jScrollPane)
         }
         contentPanel.validate()

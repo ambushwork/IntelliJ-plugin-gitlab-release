@@ -7,4 +7,8 @@ data class ProjectRelease(
     val name: String,
     val description: String,
     val created_at: String,
-)
+) {
+    override fun toString(): String {
+        return name
+    }
+}

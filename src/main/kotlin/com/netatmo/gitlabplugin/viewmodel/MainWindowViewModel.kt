@@ -1,10 +1,11 @@
 package com.netatmo.gitlabplugin.viewmodel
 
+import com.netatmo.gitlabplugin.model.GitlabProject
+import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import com.netatmo.gitlabplugin.repository.GroupsRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 
 class MainWindowViewModel {
@@ -15,15 +16,9 @@ class MainWindowViewModel {
 
     private val _selectedGroupState = MutableStateFlow<Int?>(null)
 
-    private val _selectedRelease = MutableStateFlow<Pair<String, Int>?>(null)
+    private val _detailState = MutableStateFlow(DetailState())
 
-    val selectedRelease =
-        compositeProjectRepository.compositeProjectFlow.combine(_selectedRelease) { compositeProjects, pair ->
-            pair?.let {
-                compositeProjects
-                    .firstOrNull { it.gitlabProject.id == pair.second }?.projectReleases?.firstOrNull { it.name == pair.first }
-            }
-        }
+    internal val detailState = _detailState.asStateFlow()
 
     val compositeProjectFlow = compositeProjectRepository.compositeProjectFlow
 
@@ -61,9 +56,24 @@ class MainWindowViewModel {
         }
     }
 
-    internal fun selectRelease(projectId: Int, name: String) {
-        _selectedRelease.update {
-            Pair(name, projectId)
+    internal fun selectRelease(projectId: Int, release: ProjectRelease) {
+        _detailState.update {
+            DetailState(getGitlabProject(projectId), release)
         }
     }
+
+    internal fun selectProject(projectId: Int) {
+        _detailState.update {
+            DetailState(getGitlabProject(projectId))
+        }
+    }
+
+    private fun getGitlabProject(projectId: Int): GitlabProject? {
+        return compositeProjectRepository.compositeProjectFlow.value.firstOrNull { it.gitlabProject.id == projectId }?.gitlabProject
+    }
+
+    internal data class DetailState(
+        val gitlabProject: GitlabProject? = null,
+        val release: ProjectRelease? = null
+    )
 }

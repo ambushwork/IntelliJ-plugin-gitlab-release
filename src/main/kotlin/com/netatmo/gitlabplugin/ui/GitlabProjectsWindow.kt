@@ -8,10 +8,8 @@ import com.intellij.ui.content.Content
 import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.PlatformIcons
-import com.netatmo.gitlabplugin.model.CompositeProject
-import com.netatmo.gitlabplugin.model.GitlabProject
-import com.netatmo.gitlabplugin.model.Group
-import com.netatmo.gitlabplugin.model.ProjectRelease
+import com.netatmo.gitlabplugin.callback.OnClickListener
+import com.netatmo.gitlabplugin.model.*
 import com.netatmo.gitlabplugin.viewmodel.MainWindowViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +19,6 @@ import java.awt.BorderLayout
 import java.awt.Dimension
 import java.awt.FlowLayout
 import java.awt.event.MouseEvent
-import java.awt.event.MouseListener
 import javax.swing.*
 import javax.swing.tree.DefaultMutableTreeNode
 
@@ -30,16 +27,20 @@ class GitlabProjectsWindow : ToolWindowFactory {
 
     private val contentPanel = JPanel()
     private val listContent = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
+    private val pageIndicatorPanel = JPanel().apply {
+        this.layout = FlowLayout(FlowLayout.LEFT)
+    }
     private val selectorContent = JPanel()
     private val detailContent = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         preferredSize = Dimension(200, 400) // Set preferred height
-
     }
     private var listScrollPane = JScrollPane(listContent)
     private val viewModel = MainWindowViewModel()
 
+
     init {
+        // TODO merge toolbar ui state.
         CoroutineScope(Dispatchers.Default).launch {
             viewModel.compositeProjectFlow.collectLatest {
                 updateListView(it)
@@ -55,6 +56,12 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 updateDetailPanel(it)
             }
         }
+        CoroutineScope(Dispatchers.Default).launch {
+            viewModel.pageFlow.collectLatest {
+                updatePageIndicator(it)
+            }
+        }
+
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -64,7 +71,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
 
     private fun createContentPanel(): JPanel {
         contentPanel.layout = BorderLayout()
-        setupToolbar(contentPanel)
+        setupToolbar()
         val mainPanel = JPanel()
         mainPanel.layout = BoxLayout(mainPanel, BoxLayout.Y_AXIS)
         mainPanel.add(listScrollPane)
@@ -74,7 +81,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
     }
 
 
-    private fun setupToolbar(contentJPanel: JPanel): JToolBar {
+    private fun setupToolbar(): JToolBar {
         // Create the toolbar
         val toolBar = JToolBar().apply {
 
@@ -89,7 +96,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
         val favoriteButton = JButton(AllIcons.Actions.AddToDictionary)
         topLine.add(refreshButton)
         topLine.add(favoriteButton)
-
+        topLine.add(pageIndicatorPanel)
 
         val searchField = JTextField(15)
 
@@ -99,27 +106,10 @@ class GitlabProjectsWindow : ToolWindowFactory {
         bottomLine.add(JLabel("Search: "))
         bottomLine.add(searchField)
         bottomLine.add(JLabel(AllIcons.Actions.Search).apply {
-            this.addMouseListener(object : MouseListener {
+            this.addMouseListener(object : OnClickListener {
                 override fun mouseClicked(e: MouseEvent?) {
                     viewModel.searchProjectInGroup(searchField.text)
                 }
-
-                override fun mousePressed(e: MouseEvent?) {
-                    // do nothing
-                }
-
-                override fun mouseReleased(e: MouseEvent?) {
-                    // do nothing
-                }
-
-                override fun mouseEntered(e: MouseEvent?) {
-                    // do nothing
-                }
-
-                override fun mouseExited(e: MouseEvent?) {
-                    // do nothing
-                }
-
             })
         })
 
@@ -133,6 +123,29 @@ class GitlabProjectsWindow : ToolWindowFactory {
         contentPanel.add(toolbarPanel, BorderLayout.PAGE_START)
 
         return toolBar
+    }
+
+    private fun updatePageIndicator(pageInfo: PageInfo?) {
+        pageIndicatorPanel.removeAll()
+        pageInfo?.let {
+            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Back).apply {
+                this.addMouseListener(object : OnClickListener {
+                    override fun mouseClicked(e: MouseEvent?) {
+                        viewModel.fetchLastPage()
+                    }
+                })
+            })
+            pageIndicatorPanel.add(JLabel("${it.current}/${it.total}"))
+            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Forward).apply {
+                this.addMouseListener(object : OnClickListener {
+                    override fun mouseClicked(e: MouseEvent?) {
+                        viewModel.fetchNextPage()
+                    }
+                })
+            })
+        }
+        pageIndicatorPanel.validate()
+        pageIndicatorPanel.repaint()
     }
 
     private fun updateSelector(groups: List<Group>) {

@@ -2,7 +2,10 @@ package com.netatmo.gitlabplugin.viewmodel
 
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import com.netatmo.gitlabplugin.repository.GroupsRepository
-import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 
 class MainWindowViewModel {
 
@@ -23,19 +26,10 @@ class MainWindowViewModel {
         }
 
     val compositeProjectFlow = compositeProjectRepository.compositeProjectFlow
-        .combine(_selectedGroupState.asStateFlow()) { projects, group ->
-            group?.let {
-                projects.filter { it.gitlabProject.namespace.id == group }
-            } ?: projects
-        }.onEach {
-            if (it.size < 20) {
-                _selectedGroupState.value?.let { groupId ->
-                    compositeProjectRepository.fetchNextPageByGroup(groupId)
-                }
-            }
-        }
 
     val groupStateFlow = groupsRepository.groupsFlow
+
+    val pageFlow = compositeProjectRepository.pageFlow.asStateFlow()
 
     internal fun requestCompositeProjects() {
         compositeProjectRepository.fetch()
@@ -51,6 +45,19 @@ class MainWindowViewModel {
     internal fun changeGroup(groupId: Int) {
         _selectedGroupState.update {
             groupId
+        }
+        compositeProjectRepository.fetchByGroup(groupId)
+    }
+
+    internal fun fetchNextPage() {
+        _selectedGroupState.value?.let {
+            compositeProjectRepository.fetchNextPageByGroup(it)
+        }
+    }
+
+    internal fun fetchLastPage() {
+        _selectedGroupState.value?.let {
+            compositeProjectRepository.fetchLastPageByGroup(it)
         }
     }
 

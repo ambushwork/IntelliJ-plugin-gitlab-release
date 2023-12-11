@@ -1,6 +1,7 @@
 package com.netatmo.gitlabplugin.repository
 
 import com.netatmo.gitlabplugin.model.CompositeProject
+import com.netatmo.gitlabplugin.model.PageInfo
 import com.netatmo.gitlabplugin.retrofit.GitlabApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -13,12 +14,12 @@ class CompositeProjectRepository {
 
     val compositeProjectFlow = MutableStateFlow<List<CompositeProject>>(emptyList())
 
-    var currentPage: Int = 0
+    val pageFlow: MutableStateFlow<PageInfo?> = MutableStateFlow(null)
 
     fun fetch() = CoroutineScope(Dispatchers.IO).launch {
         GitlabApi.getProjects().apply {
             if (this.isSuccessful) {
-                currentPage = getCurrentPage()
+                updatePageFlow()
                 this.body()?.let { body ->
                     body.map {
                         CompositeProject(
@@ -45,13 +46,21 @@ class CompositeProjectRepository {
     }
 
     fun fetchNextPageByGroup(groupId: Int) {
-        fetchByGroup(groupId, currentPage + 1)
+        pageFlow.value?.takeIf { it.current < it.total }?.let {
+            fetchByGroup(groupId, it.current + 1)
+        }
+    }
+
+    fun fetchLastPageByGroup(groupId: Int) {
+        pageFlow.value?.takeIf { it.current > 1 }?.let {
+            fetchByGroup(groupId, it.current - 1)
+        }
     }
 
     fun fetchByGroup(groupId: Int, page: Int? = null) = CoroutineScope(Dispatchers.IO).launch {
         GitlabApi.getProjectByGroup(groupId, page).apply {
             if (isSuccessful) {
-                currentPage = getCurrentPage()
+                updatePageFlow()
                 this.body()?.let { body ->
                     body.map {
                         CompositeProject(
@@ -59,7 +68,7 @@ class CompositeProjectRepository {
                             projectReleases = emptyList()
                         )
                     }.apply {
-                        mergeProjects(this)
+                        compositeProjectFlow.update { this }
                     }.map { incompleteProject ->
                         GitlabApi.getReleasesByProject(incompleteProject.gitlabProject.id).body()?.let { releases ->
                             incompleteProject.copy(
@@ -67,7 +76,7 @@ class CompositeProjectRepository {
                             )
                         } ?: incompleteProject
                     }.apply {
-                        mergeProjects(this)
+                        compositeProjectFlow.update { this }
                     }
                 }
             }
@@ -77,6 +86,7 @@ class CompositeProjectRepository {
     fun searchProjectInGroup(criteria: String, groupId: Int) = CoroutineScope(Dispatchers.IO).launch {
         GitlabApi.searchProjectInGroup(criteria, groupId).apply {
             if (isSuccessful) {
+                updatePageFlow()
                 this.body()?.let { body ->
                     body.map {
                         CompositeProject(
@@ -103,8 +113,16 @@ class CompositeProjectRepository {
         return compositeProjectFlow.value.last { it.gitlabProject.namespace.id == groupId }.gitlabProject.id
     }
 
+    private fun Response<*>.updatePageFlow() {
+        pageFlow.update { PageInfo(getCurrentPage(), getTotalPage()) }
+    }
+
     private fun Response<*>.getCurrentPage(): Int {
         return this.headers()["X-Page"]?.toInt() ?: 0
+    }
+
+    private fun Response<*>.getTotalPage(): Int {
+        return this.headers()["X-Total-Pages"]?.toInt() ?: 0
     }
 
 

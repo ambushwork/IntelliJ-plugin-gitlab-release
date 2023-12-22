@@ -4,13 +4,17 @@ import com.netatmo.gitlabplugin.model.GitlabProject
 import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import com.netatmo.gitlabplugin.repository.GroupsRepository
+import com.netatmo.gitlabplugin.repository.ProjectFavoriteRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 
 class MainWindowViewModel {
 
     private val compositeProjectRepository: CompositeProjectRepository = CompositeProjectRepository()
+
+    private val projectFavoriteRepository = ProjectFavoriteRepository()
 
     private val groupsRepository: GroupsRepository = GroupsRepository()
 
@@ -18,13 +22,37 @@ class MainWindowViewModel {
 
     private val _detailState = MutableStateFlow(DetailState())
 
-    internal val detailState = _detailState.asStateFlow()
+    private val projectFavFlow = projectFavoriteRepository.getFavoriteProjectFlow()
 
-    val compositeProjectFlow = compositeProjectRepository.compositeProjectFlow
+    private val _favState = MutableStateFlow(false)
+
+    val favState = _favState.asStateFlow()
+
+    val compositeProjectFlow = combine(
+        favState,
+        compositeProjectRepository.compositeProjectFlow,
+        compositeProjectRepository.getFavProjects()
+    ) { fav, projects, favs ->
+        if (fav) {
+            favs
+        } else {
+            projects
+        }
+    }
+
+    internal val detailState = _detailState.combine(projectFavFlow) { detailState, favs ->
+        detailState.copy(
+            favorite = favs.any { it.id == detailState.gitlabProject?.id }
+        )
+    }
 
     val groupStateFlow = groupsRepository.groupsFlow
 
     val pageFlow = compositeProjectRepository.pageFlow.asStateFlow()
+
+    internal fun toggleFavorite() {
+        _favState.update { it.not() }
+    }
 
     internal fun requestCompositeProjects() {
         compositeProjectRepository.fetch()
@@ -58,13 +86,26 @@ class MainWindowViewModel {
 
     internal fun selectRelease(projectId: Int, release: ProjectRelease) {
         _detailState.update {
-            DetailState(getGitlabProject(projectId), release)
+            DetailState(
+                getGitlabProject(projectId),
+                release,
+                favorite = isFavorite(projectId)
+            )
         }
     }
 
     internal fun selectProject(projectId: Int) {
         _detailState.update {
-            DetailState(getGitlabProject(projectId))
+            DetailState(
+                getGitlabProject(projectId),
+                favorite = isFavorite(projectId)
+            )
+        }
+    }
+
+    internal fun toggleProjectFav(projectId: Int) {
+        getGitlabProject(projectId)?.let {
+            projectFavoriteRepository.setProjectFav(it, isFavorite(projectId).not())
         }
     }
 
@@ -72,8 +113,13 @@ class MainWindowViewModel {
         return compositeProjectRepository.compositeProjectFlow.value.firstOrNull { it.gitlabProject.id == projectId }?.gitlabProject
     }
 
+    private fun isFavorite(projectId: Int): Boolean {
+        return projectFavoriteRepository.isFav(projectId)
+    }
+
     internal data class DetailState(
         val gitlabProject: GitlabProject? = null,
-        val release: ProjectRelease? = null
+        val release: ProjectRelease? = null,
+        val favorite: Boolean = false
     )
 }

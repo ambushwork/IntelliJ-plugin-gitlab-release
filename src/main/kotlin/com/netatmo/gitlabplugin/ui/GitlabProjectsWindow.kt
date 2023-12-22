@@ -10,6 +10,7 @@ import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.PlatformIcons
 import com.netatmo.gitlabplugin.callback.OnClickListener
 import com.netatmo.gitlabplugin.model.*
+import com.netatmo.gitlabplugin.utils.applyFavoriteIcon
 import com.netatmo.gitlabplugin.viewmodel.MainWindowViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +26,7 @@ import javax.swing.tree.DefaultMutableTreeNode
 
 class GitlabProjectsWindow : ToolWindowFactory {
 
+    private var favoriteButton: JLabel = JLabel()
     private val contentPanel = JPanel()
     private val listContent = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
     private val pageIndicatorPanel = JPanel().apply {
@@ -62,7 +64,11 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 updatePageIndicator(it)
             }
         }
-
+        CoroutineScope(Dispatchers.Default).launch {
+            viewModel.favState.collectLatest {
+                updateFavIcon(it)
+            }
+        }
     }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
@@ -81,6 +87,10 @@ class GitlabProjectsWindow : ToolWindowFactory {
         return contentPanel
     }
 
+    private fun updateFavIcon(fav: Boolean) {
+        applyFavoriteIcon(favoriteButton, fav)
+        favoriteButton.repaint()
+    }
 
     private fun setupToolbar(): JToolBar {
         // Create the toolbar
@@ -90,11 +100,18 @@ class GitlabProjectsWindow : ToolWindowFactory {
         val topLine = JPanel(FlowLayout(FlowLayout.LEFT))
 
         // Add an icon to the toolbar
-        val refreshButton = JButton(PlatformIcons.SYNCHRONIZE_ICON)
-        refreshButton.addActionListener {
-            viewModel.requestCompositeProjects()
-        }
-        val favoriteButton = JButton(AllIcons.Actions.AddToDictionary)
+        val refreshButton = JLabel(PlatformIcons.SYNCHRONIZE_ICON)
+        refreshButton.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) {
+                viewModel.requestCompositeProjects()
+            }
+        })
+        applyFavoriteIcon(favoriteButton, false)
+        favoriteButton.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent?) {
+                viewModel.toggleFavorite()
+            }
+        })
         topLine.add(refreshButton)
         topLine.add(favoriteButton)
         topLine.add(pageIndicatorPanel)
@@ -215,16 +232,15 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 descriptionContent.add(JTextArea(state.release.description))
             } else {
                 state.gitlabProject?.apply {
-
-                    val imageIcon =
-                        ImageIcon(this@GitlabProjectsWindow::class.java.getResource("/drawable/star.png"))
-                    val image: Image = imageIcon.image // transform it
-                    val newimg = image.getScaledInstance(20, 20, Image.SCALE_SMOOTH) // scale it the smooth way
-
                     val title = JLabel(this.name)
                     title.font = Font("Arial", Font.BOLD, 20)
                     title.border = BorderFactory.createEmptyBorder(10, 10, 10, 10) // Add padding
-                    title.icon = ImageIcon(newimg)
+                    applyFavoriteIcon(title, detailState.favorite)
+                    title.addMouseListener(object : MouseAdapter() {
+                        override fun mouseClicked(e: MouseEvent?) {
+                            viewModel.toggleProjectFav(this@apply.id)
+                        }
+                    })
 
                     descriptionContent.add(title)
                     val timestamp = JLabel("Updated at: ${this.updated_at}")

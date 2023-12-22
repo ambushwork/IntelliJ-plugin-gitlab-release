@@ -5,7 +5,9 @@ import com.netatmo.gitlabplugin.model.PageInfo
 import com.netatmo.gitlabplugin.retrofit.GitlabApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.Response
@@ -14,7 +16,20 @@ class CompositeProjectRepository {
 
     val compositeProjectFlow = MutableStateFlow<List<CompositeProject>>(emptyList())
 
+    private val favoriteRepository = ProjectFavoriteRepository()
+
     val pageFlow: MutableStateFlow<PageInfo?> = MutableStateFlow(null)
+
+    fun getFavProjects(): Flow<List<CompositeProject>> {
+        return favoriteRepository.getFavoriteProjectFlow().map { set ->
+            set.map { project ->
+                CompositeProject(
+                    gitlabProject = project,
+                    projectReleases = GitlabApi.getReleasesByProject(project.id).body() ?: emptyList()
+                )
+            }
+        }
+    }
 
     fun fetch() = CoroutineScope(Dispatchers.IO).launch {
         GitlabApi.getProjects().apply {
@@ -109,9 +124,6 @@ class CompositeProjectRepository {
         }
     }
 
-    private fun getLastProjectIdInGroup(groupId: Int): Int {
-        return compositeProjectFlow.value.last { it.gitlabProject.namespace.id == groupId }.gitlabProject.id
-    }
 
     private fun Response<*>.updatePageFlow() {
         pageFlow.update { PageInfo(getCurrentPage(), getTotalPage()) }

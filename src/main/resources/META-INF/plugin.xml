@@ -28,5 +28,6 @@
         <!--Register extensions here-->
         <toolWindow id="Gitlab Projects" secondary="true" anchor="right"
                     factoryClass="com.netatmo.gitlabplugin.ui.GitlabProjectsWindow"/>
+        <applicationService serviceImplementation="com.netatmo.gitlabplugin.storage.FavProjectStateService"/>
     </extensions>
 </idea-plugin>

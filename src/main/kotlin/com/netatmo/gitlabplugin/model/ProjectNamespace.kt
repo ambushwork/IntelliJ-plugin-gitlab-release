@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ProjectNamespace(
-    val id: Int,
-    val name: String,
-    val path: String,
+    var id: Int = 0,
+    var name: String = String(),
+    var path: String = String(),
 )

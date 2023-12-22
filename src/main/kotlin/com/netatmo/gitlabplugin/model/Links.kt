@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class Links(
-    val self: String,
+    var self: String = String(),
     //val merge_requests: String,
     //val repo_branches: String,
 )

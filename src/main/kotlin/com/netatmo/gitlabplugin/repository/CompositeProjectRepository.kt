@@ -5,10 +5,7 @@ import com.netatmo.gitlabplugin.model.PageInfo
 import com.netatmo.gitlabplugin.retrofit.GitlabApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import retrofit2.Response
 
@@ -19,6 +16,10 @@ class CompositeProjectRepository {
     private val favoriteRepository = ProjectFavoriteRepository()
 
     val pageFlow: MutableStateFlow<PageInfo?> = MutableStateFlow(null)
+
+    private val _loadingState = MutableStateFlow(false)
+
+    val loadingState = _loadingState.asStateFlow()
 
     fun getFavProjects(): Flow<List<CompositeProject>> {
         return favoriteRepository.getFavoriteProjectFlow().map { set ->
@@ -32,6 +33,7 @@ class CompositeProjectRepository {
     }
 
     fun fetch() = CoroutineScope(Dispatchers.IO).launch {
+        _loadingState.update { true }
         GitlabApi.getProjects().apply {
             if (this.isSuccessful) {
                 updatePageFlow()
@@ -51,6 +53,7 @@ class CompositeProjectRepository {
                             )
                         } ?: incompleteProject
                     }.apply {
+                        _loadingState.update { false }
                         compositeProjectFlow.update { this }
                     }
                 }
@@ -73,6 +76,7 @@ class CompositeProjectRepository {
     }
 
     fun fetchByGroup(groupId: Int, page: Int? = null) = CoroutineScope(Dispatchers.IO).launch {
+        _loadingState.update { true }
         GitlabApi.getProjectByGroup(groupId, page).apply {
             if (isSuccessful) {
                 updatePageFlow()
@@ -91,6 +95,7 @@ class CompositeProjectRepository {
                             )
                         } ?: incompleteProject
                     }.apply {
+                        _loadingState.update { false }
                         compositeProjectFlow.update { this }
                     }
                 }
@@ -99,6 +104,7 @@ class CompositeProjectRepository {
     }
 
     fun searchProjectInGroup(criteria: String, groupId: Int) = CoroutineScope(Dispatchers.IO).launch {
+        _loadingState.update { true }
         GitlabApi.searchProjectInGroup(criteria, groupId).apply {
             if (isSuccessful) {
                 updatePageFlow()
@@ -117,6 +123,7 @@ class CompositeProjectRepository {
                             )
                         } ?: incompleteProject
                     }.apply {
+                        _loadingState.update { false }
                         compositeProjectFlow.update { this }
                     }
                 }

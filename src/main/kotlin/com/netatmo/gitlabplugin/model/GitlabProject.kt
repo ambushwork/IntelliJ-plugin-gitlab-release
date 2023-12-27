@@ -15,6 +15,10 @@ data class GitlabProject(
     var updated_at: String = String(),
     var web_url: String = String(),
     var _links: Links = Links()
-) {
+) : Comparable<GitlabProject> {
+    override fun compareTo(other: GitlabProject): Int {
+        return id - other.id
+    }
+
     override fun toString(): String = name
 }

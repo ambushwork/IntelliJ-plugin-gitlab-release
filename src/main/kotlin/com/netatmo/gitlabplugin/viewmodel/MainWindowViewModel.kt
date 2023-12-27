@@ -1,12 +1,12 @@
 package com.netatmo.gitlabplugin.viewmodel
 
 import com.netatmo.gitlabplugin.model.GitlabProject
+import com.netatmo.gitlabplugin.model.PageInfo
 import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import com.netatmo.gitlabplugin.repository.GroupsRepository
 import com.netatmo.gitlabplugin.repository.ProjectFavoriteRepository
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 
@@ -26,10 +26,17 @@ class MainWindowViewModel {
 
     private val _favState = MutableStateFlow(false)
 
-    val favState = _favState.asStateFlow()
+    internal val toolbarState =
+        combine(
+            _favState,
+            compositeProjectRepository.loadingState,
+            compositeProjectRepository.pageFlow
+        ) { fav, loading, pageInfo ->
+            ToolbarState(loading = loading, favorite = fav, pageInfo = pageInfo)
+        }
 
     val compositeProjectFlow = combine(
-        favState,
+        _favState,
         compositeProjectRepository.compositeProjectFlow,
         compositeProjectRepository.getFavProjects()
     ) { fav, projects, favs ->
@@ -47,8 +54,6 @@ class MainWindowViewModel {
     }
 
     val groupStateFlow = groupsRepository.groupsFlow
-
-    val pageFlow = compositeProjectRepository.pageFlow.asStateFlow()
 
     internal fun toggleFavorite() {
         _favState.update { it.not() }
@@ -121,5 +126,11 @@ class MainWindowViewModel {
         val gitlabProject: GitlabProject? = null,
         val release: ProjectRelease? = null,
         val favorite: Boolean = false
+    )
+
+    internal data class ToolbarState(
+        val loading: Boolean = false,
+        val favorite: Boolean = false,
+        val pageInfo: PageInfo? = null,
     )
 }

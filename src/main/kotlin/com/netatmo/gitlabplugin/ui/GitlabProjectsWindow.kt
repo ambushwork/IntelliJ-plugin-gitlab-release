@@ -9,8 +9,12 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.PlatformIcons
 import com.netatmo.gitlabplugin.callback.OnClickListener
-import com.netatmo.gitlabplugin.model.*
+import com.netatmo.gitlabplugin.model.CompositeProject
+import com.netatmo.gitlabplugin.model.GitlabProject
+import com.netatmo.gitlabplugin.model.Group
+import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.utils.applyFavoriteIcon
+import com.netatmo.gitlabplugin.utils.getLoadingLabel
 import com.netatmo.gitlabplugin.viewmodel.MainWindowViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,12 +25,16 @@ import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.net.URI
 import javax.swing.*
+import javax.swing.text.SimpleAttributeSet
+import javax.swing.text.StyleConstants
 import javax.swing.tree.DefaultMutableTreeNode
 
 
 class GitlabProjectsWindow : ToolWindowFactory {
 
-    private var favoriteButton: JLabel = JLabel()
+
+    private val toolbarTopLine = JPanel(FlowLayout(FlowLayout.LEFT))
+
     private val contentPanel = JPanel()
     private val listContent = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
     private val pageIndicatorPanel = JPanel().apply {
@@ -60,13 +68,8 @@ class GitlabProjectsWindow : ToolWindowFactory {
         }
 
         CoroutineScope(Dispatchers.Default).launch {
-            viewModel.pageFlow.collectLatest {
-                updatePageIndicator(it)
-            }
-        }
-        CoroutineScope(Dispatchers.Default).launch {
-            viewModel.favState.collectLatest {
-                updateFavIcon(it)
+            viewModel.toolbarState.collectLatest {
+                updateToolbarIcon(it)
             }
         }
     }
@@ -87,34 +90,64 @@ class GitlabProjectsWindow : ToolWindowFactory {
         return contentPanel
     }
 
-    private fun updateFavIcon(fav: Boolean) {
-        applyFavoriteIcon(favoriteButton, fav)
-        favoriteButton.repaint()
+    private fun updateToolbarIcon(toolbarState: MainWindowViewModel.ToolbarState? = null) {
+        // Add an icon to the toolbar
+        toolbarTopLine.removeAll()
+        val refreshButton = JLabel(PlatformIcons.SYNCHRONIZE_ICON).apply {
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent?) {
+                    viewModel.requestCompositeProjects()
+                }
+            })
+        }
+
+        val favoriteButton: JLabel = JLabel().apply {
+            this@GitlabProjectsWindow.applyFavoriteIcon(this, toolbarState?.favorite ?: false)
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent?) {
+                    viewModel.toggleFavorite()
+                }
+            })
+        }
+
+
+        pageIndicatorPanel.removeAll()
+        toolbarState?.pageInfo?.let {
+            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Back).apply {
+                this.addMouseListener(object : OnClickListener {
+                    override fun mouseClicked(e: MouseEvent?) {
+                        viewModel.fetchLastPage()
+                    }
+                })
+            })
+            pageIndicatorPanel.add(JLabel("${it.current}/${it.total}"))
+            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Forward).apply {
+                this.addMouseListener(object : OnClickListener {
+                    override fun mouseClicked(e: MouseEvent?) {
+                        viewModel.fetchNextPage()
+                    }
+                })
+            })
+        }
+        pageIndicatorPanel.validate()
+        pageIndicatorPanel.repaint()
+
+        toolbarTopLine.add(refreshButton)
+        toolbarTopLine.add(favoriteButton)
+        toolbarTopLine.add(pageIndicatorPanel)
+        if (toolbarState?.loading == true) {
+            toolbarTopLine.add(getLoadingLabel())
+        }
+    }
+
+    private fun setupTopLine() {
+
     }
 
     private fun setupToolbar(): JToolBar {
         // Create the toolbar
-        val toolBar = JToolBar().apply {
-
-        }
-        val topLine = JPanel(FlowLayout(FlowLayout.LEFT))
-
-        // Add an icon to the toolbar
-        val refreshButton = JLabel(PlatformIcons.SYNCHRONIZE_ICON)
-        refreshButton.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) {
-                viewModel.requestCompositeProjects()
-            }
-        })
-        applyFavoriteIcon(favoriteButton, false)
-        favoriteButton.addMouseListener(object : MouseAdapter() {
-            override fun mouseClicked(e: MouseEvent?) {
-                viewModel.toggleFavorite()
-            }
-        })
-        topLine.add(refreshButton)
-        topLine.add(favoriteButton)
-        topLine.add(pageIndicatorPanel)
+        val toolBar = JToolBar()
+        setupTopLine()
 
         val searchField = JTextField(15)
 
@@ -135,35 +168,12 @@ class GitlabProjectsWindow : ToolWindowFactory {
         val toolbarPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
         }
-        toolbarPanel.add(topLine)
+        toolbarPanel.add(toolbarTopLine)
         toolbarPanel.add(bottomLine)
 
         contentPanel.add(toolbarPanel, BorderLayout.PAGE_START)
 
         return toolBar
-    }
-
-    private fun updatePageIndicator(pageInfo: PageInfo?) {
-        pageIndicatorPanel.removeAll()
-        pageInfo?.let {
-            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Back).apply {
-                this.addMouseListener(object : OnClickListener {
-                    override fun mouseClicked(e: MouseEvent?) {
-                        viewModel.fetchLastPage()
-                    }
-                })
-            })
-            pageIndicatorPanel.add(JLabel("${it.current}/${it.total}"))
-            pageIndicatorPanel.add(JLabel(AllIcons.Actions.Forward).apply {
-                this.addMouseListener(object : OnClickListener {
-                    override fun mouseClicked(e: MouseEvent?) {
-                        viewModel.fetchNextPage()
-                    }
-                })
-            })
-        }
-        pageIndicatorPanel.validate()
-        pageIndicatorPanel.repaint()
     }
 
     private fun updateSelector(groups: List<Group>) {
@@ -193,8 +203,8 @@ class GitlabProjectsWindow : ToolWindowFactory {
         // Create the JTree with the root node
         val tree = Tree(rootNode).apply {
             addTreeSelectionListener {
-                val node = this.lastSelectedPathComponent as DefaultMutableTreeNode
-                when (val obj = node.userObject) {
+                val node = this.lastSelectedPathComponent as DefaultMutableTreeNode?
+                when (val obj = node?.userObject) {
                     is ProjectRelease -> {
                         val projectNode = node.parent as DefaultMutableTreeNode
                         projectNode.userObject.apply {
@@ -229,7 +239,39 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 this.layout = BoxLayout(this, BoxLayout.Y_AXIS)
             }
             if (state.release != null) {
-                descriptionContent.add(JTextArea(state.release.description))
+                val textPane = JTextPane()
+
+                descriptionContent.add(textPane)
+
+
+                // Create a simple attribute set for the title
+                val titleAttributes = SimpleAttributeSet()
+                StyleConstants.setFontFamily(titleAttributes, "Arial")
+                StyleConstants.setFontSize(titleAttributes, 20)
+                StyleConstants.setBold(titleAttributes, true)
+
+                // Create a simple attribute set for the description
+                val descriptionAttributes = SimpleAttributeSet()
+                StyleConstants.setFontFamily(descriptionAttributes, "Times New Roman")
+                StyleConstants.setFontSize(descriptionAttributes, 14)
+                StyleConstants.setItalic(descriptionAttributes, true)
+
+                // Set the text with different attributes
+
+                // Set the text with different attributes
+                textPane.text = "${state.release.name}\n \n ${state.release.description}"
+
+                // Apply the attributes to specific text ranges
+                textPane.styledDocument.setCharacterAttributes(0, 6, titleAttributes, true) // Apply to "Title:"
+
+                textPane.styledDocument.setCharacterAttributes(
+                    8,
+                    textPane.text.length,
+                    descriptionAttributes,
+                    true
+                ) // Apply to the description
+
+
             } else {
                 state.gitlabProject?.apply {
                     val title = JLabel(this.name)
@@ -247,22 +289,9 @@ class GitlabProjectsWindow : ToolWindowFactory {
                     timestamp.border = BorderFactory.createEmptyBorder(10, 10, 10, 10); // Add padding
                     timestamp.alignmentX = Component.LEFT_ALIGNMENT
                     descriptionContent.add(timestamp)
-
-                    val urlLabel = JLabel("<html><u>Open Repository</u></html>")
-                    urlLabel.foreground = Color.BLUE
-                    urlLabel.cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
-                    urlLabel.addMouseListener(object : MouseAdapter() {
-                        override fun mouseClicked(e: MouseEvent?) {
-                            try {
-                                Desktop.getDesktop().browse(URI(this@apply.web_url))
-                            } catch (ex: Exception) {
-                                ex.printStackTrace()
-                            }
-                        }
-                    })
-                    urlLabel.border = BorderFactory.createEmptyBorder(10, 10, 10, 10); // Add padding
-                    urlLabel.alignmentX = Component.LEFT_ALIGNMENT
-                    descriptionContent.add(urlLabel)
+                    descriptionContent.add(createWebLink("Open Repository", web_url))
+                    /* descriptionContent.add(createWebLink("Browse Branches", this._links.repo_branches))
+                     descriptionContent.add(createWebLink("Browse Merge requests", this._links.merge_requests))*/
                     descriptionContent.alignmentX = Component.LEFT_ALIGNMENT
                 }
 
@@ -273,5 +302,23 @@ class GitlabProjectsWindow : ToolWindowFactory {
         }
         contentPanel.validate()
         contentPanel.repaint()
+    }
+
+    private fun createWebLink(title: String, link: String): JLabel {
+        return JLabel("<html><u>$title</u></html>").apply {
+            foreground = Color(0, 128, 255)
+            cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+            border = BorderFactory.createEmptyBorder(10, 10, 10, 10); // Add padding
+            alignmentX = Component.LEFT_ALIGNMENT
+            addMouseListener(object : MouseAdapter() {
+                override fun mouseClicked(e: MouseEvent?) {
+                    try {
+                        Desktop.getDesktop().browse(URI(link))
+                    } catch (ex: Exception) {
+                        ex.printStackTrace()
+                    }
+                }
+            })
+        }
     }
 }

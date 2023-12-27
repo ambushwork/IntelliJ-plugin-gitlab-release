@@ -29,5 +29,10 @@
         <toolWindow id="Gitlab Projects" secondary="true" anchor="right"
                     factoryClass="com.netatmo.gitlabplugin.ui.GitlabProjectsWindow"/>
         <applicationService serviceImplementation="com.netatmo.gitlabplugin.storage.FavProjectStateService"/>
+        <applicationService serviceImplementation="com.netatmo.gitlabplugin.settings.ConfigurationPersistor"/>
+        <applicationConfigurable parentId="tools" instance="com.netatmo.gitlabplugin.settings.ConfigurationScreen"
+                                 id="com.netatmo.gitlabplugin.settings.ConfigurationScreen"
+                                 displayName="Gitlab plugin settings"/>
+
     </extensions>
 </idea-plugin>

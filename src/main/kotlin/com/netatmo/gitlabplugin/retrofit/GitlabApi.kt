@@ -4,6 +4,7 @@ import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFact
 import com.netatmo.gitlabplugin.model.GitlabProject
 import com.netatmo.gitlabplugin.model.Group
 import com.netatmo.gitlabplugin.model.ProjectRelease
+import com.netatmo.gitlabplugin.settings.ConfigurationPersistor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -16,17 +17,14 @@ import retrofit2.Retrofit
  */
 object GitlabApi {
 
-    private val baseUrl = "https://gitlab.corp.netatmo.com/api/v4/"
-    private val token = "glpat-rR_446FUxFaVNsfMCpEE"
-
     private val retrofit: GitlabService
 
     init {
         val contentType = "application/json".toMediaType()
-        val okHttpClient = okHttpClient(token)
+        val okHttpClient = okHttpClient(ConfigurationPersistor.getInstance().token)
         val serializeJson = Json { ignoreUnknownKeys = true }
         retrofit = Retrofit.Builder()
-            .baseUrl(baseUrl)
+            .baseUrl(ConfigurationPersistor.getInstance().gitlabBaseUrl)
             .validateEagerly(true)
             .client(okHttpClient)
             .addConverterFactory(serializeJson.asConverterFactory(contentType))

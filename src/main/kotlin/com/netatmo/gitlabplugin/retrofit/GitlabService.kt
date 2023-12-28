@@ -24,13 +24,15 @@ interface GitlabService {
     @GET("groups/{id}/projects")
     suspend fun getProjectByGroup(
         @Path("id") id: Int,
-        @Query("page") page: Int? = null
+        @Query("page") page: Int? = null,
+        @Query("order_by") order_by: String = "updated_at"
     ): Response<List<GitlabProject>>
 
     @GET("groups/{id}/projects")
     suspend fun searchProjectInGroup(
         @Path("id") id: Int,
         @Query("search") search: String,
+        @Query("order_by") order_by: String = "updated_at"
     ): Response<List<GitlabProject>>
 
 

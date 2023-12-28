@@ -1,7 +1,5 @@
 TODO LIST:
 * Update release detail with Name, timestamp, etc.
-* Order project by update date
-* Error handling
 
 KNOWN BUGS:
 * change base url or token in settings requires restart of IDE

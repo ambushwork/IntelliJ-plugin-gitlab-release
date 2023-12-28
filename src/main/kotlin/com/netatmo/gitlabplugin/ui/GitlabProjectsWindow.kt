@@ -29,12 +29,13 @@ import javax.swing.tree.DefaultMutableTreeNode
 
 
 class GitlabProjectsWindow : ToolWindowFactory {
+
     private val iconsGroupPanel = JPanel().apply {
         layout = FlowLayout(FlowLayout.LEFT)
         preferredSize = Dimension(preferredSize.width, 20)
     }
 
-    private val endGroupPanel = JPanel().apply {
+    private val pageIndicatorPanel = JPanel().apply {
         layout = FlowLayout(FlowLayout.LEFT)
         preferredSize = Dimension(80, 42)
     }
@@ -42,14 +43,13 @@ class GitlabProjectsWindow : ToolWindowFactory {
     private val contentPanel = JPanel()
     private val listContent = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
 
-    private val selectorContent = JPanel()
+    private val groupMenuContent = JPanel()
     private val detailContent = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
         preferredSize = Dimension(200, 400) // Set preferred height
     }
     private var listScrollPane = JScrollPane(listContent)
     private val viewModel = MainWindowViewModel()
-
 
     init {
         CoroutineScope(Dispatchers.Default).launch {
@@ -135,21 +135,21 @@ class GitlabProjectsWindow : ToolWindowFactory {
             iconsGroupPanel.add(getLoadingLabel())
         }
 
-        endGroupPanel.removeAll()
-        endGroupPanel.add(pageIndicatorPanel)
+        this.pageIndicatorPanel.removeAll()
+        this.pageIndicatorPanel.add(pageIndicatorPanel)
         iconsGroupPanel.validate()
         iconsGroupPanel.repaint()
-        endGroupPanel.validate()
-        endGroupPanel.repaint()
+        this.pageIndicatorPanel.validate()
+        this.pageIndicatorPanel.repaint()
     }
 
     private fun setupToolbar(): JToolBar {
         // Create the toolbar
         val toolBar = JToolBar()
-        val searchField = JTextField(15)
+        val searchField = JTextField(10)
         val bottomLine = JPanel(FlowLayout(FlowLayout.LEFT))
         bottomLine.add(JLabel("Group: "))
-        bottomLine.add(selectorContent)
+        bottomLine.add(groupMenuContent)
         bottomLine.add(JLabel("Search: "))
         bottomLine.add(searchField)
         bottomLine.add(JLabel(AllIcons.Actions.Search).apply {
@@ -159,7 +159,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 }
             })
         })
-        bottomLine.add(endGroupPanel)
+        bottomLine.add(pageIndicatorPanel)
 
         val toolbarPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -173,13 +173,13 @@ class GitlabProjectsWindow : ToolWindowFactory {
     }
 
     private fun updateSelector(groups: List<Group>) {
-        selectorContent.removeAll()
+        groupMenuContent.removeAll()
         val comboBox = GroupSelector(groups.toTypedArray()) {
             viewModel.changeGroup(it)
         }
         // Set the preferred height of the JComboBox
-        comboBox.preferredSize = Dimension(200, 30)
-        selectorContent.add(comboBox)
+        comboBox.preferredSize = Dimension(160, 30)
+        groupMenuContent.add(comboBox)
         contentPanel.validate()
         contentPanel.repaint()
     }

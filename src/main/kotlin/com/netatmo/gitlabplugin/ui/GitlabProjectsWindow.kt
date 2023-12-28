@@ -9,11 +9,9 @@ import com.intellij.ui.content.ContentFactory
 import com.intellij.ui.treeStructure.Tree
 import com.intellij.util.PlatformIcons
 import com.netatmo.gitlabplugin.callback.OnClickListener
-import com.netatmo.gitlabplugin.model.CompositeProject
-import com.netatmo.gitlabplugin.model.GitlabProject
-import com.netatmo.gitlabplugin.model.Group
-import com.netatmo.gitlabplugin.model.ProjectRelease
+import com.netatmo.gitlabplugin.model.*
 import com.netatmo.gitlabplugin.utils.applyFavoriteIcon
+import com.netatmo.gitlabplugin.utils.applyNetworkErrorIcon
 import com.netatmo.gitlabplugin.utils.getLoadingLabel
 import com.netatmo.gitlabplugin.viewmodel.MainWindowViewModel
 import kotlinx.coroutines.CoroutineScope
@@ -31,15 +29,19 @@ import javax.swing.tree.DefaultMutableTreeNode
 
 
 class GitlabProjectsWindow : ToolWindowFactory {
+    private val iconsGroupPanel = JPanel().apply {
+        layout = FlowLayout(FlowLayout.LEFT)
+        preferredSize = Dimension(preferredSize.width, 20)
+    }
 
-
-    private val toolbarTopLine = JPanel(FlowLayout(FlowLayout.LEFT))
+    private val endGroupPanel = JPanel().apply {
+        layout = FlowLayout(FlowLayout.LEFT)
+        preferredSize = Dimension(80, 42)
+    }
 
     private val contentPanel = JPanel()
     private val listContent = JPanel().apply { layout = BoxLayout(this, BoxLayout.Y_AXIS) }
-    private val pageIndicatorPanel = JPanel().apply {
-        this.layout = FlowLayout(FlowLayout.LEFT)
-    }
+
     private val selectorContent = JPanel()
     private val detailContent = JPanel().apply {
         layout = BoxLayout(this, BoxLayout.Y_AXIS)
@@ -50,9 +52,8 @@ class GitlabProjectsWindow : ToolWindowFactory {
 
 
     init {
-        // TODO merge toolbar ui state.
         CoroutineScope(Dispatchers.Default).launch {
-            viewModel.compositeProjectFlow.collectLatest {
+            viewModel.dataStateFlow.collectLatest {
                 updateListView(it)
             }
         }
@@ -91,8 +92,8 @@ class GitlabProjectsWindow : ToolWindowFactory {
     }
 
     private fun updateToolbarIcon(toolbarState: MainWindowViewModel.ToolbarState? = null) {
-        // Add an icon to the toolbar
-        toolbarTopLine.removeAll()
+        iconsGroupPanel.removeAll()
+
         val refreshButton = JLabel(PlatformIcons.SYNCHRONIZE_ICON).apply {
             addMouseListener(object : MouseAdapter() {
                 override fun mouseClicked(e: MouseEvent?) {
@@ -100,7 +101,6 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 }
             })
         }
-
         val favoriteButton: JLabel = JLabel().apply {
             this@GitlabProjectsWindow.applyFavoriteIcon(this, toolbarState?.favorite ?: false)
             addMouseListener(object : MouseAdapter() {
@@ -109,9 +109,9 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 }
             })
         }
-
-
-        pageIndicatorPanel.removeAll()
+        val pageIndicatorPanel = JPanel().apply {
+            this.layout = FlowLayout(FlowLayout.LEFT)
+        }
         toolbarState?.pageInfo?.let {
             pageIndicatorPanel.add(JLabel(AllIcons.Actions.Back).apply {
                 this.addMouseListener(object : OnClickListener {
@@ -129,28 +129,24 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 })
             })
         }
-        pageIndicatorPanel.validate()
-        pageIndicatorPanel.repaint()
-
-        toolbarTopLine.add(refreshButton)
-        toolbarTopLine.add(favoriteButton)
-        toolbarTopLine.add(pageIndicatorPanel)
+        iconsGroupPanel.add(refreshButton)
+        iconsGroupPanel.add(favoriteButton)
         if (toolbarState?.loading == true) {
-            toolbarTopLine.add(getLoadingLabel())
+            iconsGroupPanel.add(getLoadingLabel())
         }
-    }
 
-    private fun setupTopLine() {
-
+        endGroupPanel.removeAll()
+        endGroupPanel.add(pageIndicatorPanel)
+        iconsGroupPanel.validate()
+        iconsGroupPanel.repaint()
+        endGroupPanel.validate()
+        endGroupPanel.repaint()
     }
 
     private fun setupToolbar(): JToolBar {
         // Create the toolbar
         val toolBar = JToolBar()
-        setupTopLine()
-
         val searchField = JTextField(15)
-
         val bottomLine = JPanel(FlowLayout(FlowLayout.LEFT))
         bottomLine.add(JLabel("Group: "))
         bottomLine.add(selectorContent)
@@ -163,12 +159,12 @@ class GitlabProjectsWindow : ToolWindowFactory {
                 }
             })
         })
-
+        bottomLine.add(endGroupPanel)
 
         val toolbarPanel = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.Y_AXIS)
         }
-        toolbarPanel.add(toolbarTopLine)
+        toolbarPanel.add(iconsGroupPanel)
         toolbarPanel.add(bottomLine)
 
         contentPanel.add(toolbarPanel, BorderLayout.PAGE_START)
@@ -188,8 +184,41 @@ class GitlabProjectsWindow : ToolWindowFactory {
         contentPanel.repaint()
     }
 
-    private fun updateListView(projects: List<CompositeProject>) {
+    private fun updateListView(dataState: DataState<ProjectListResponse>) {
         listContent.removeAll()
+
+        val panel = when (dataState) {
+            is DataState.Error -> createErrorPanel()
+            DataState.Idle -> createIdlePanel()
+            is DataState.Success -> createProjectListPanel(dataState.data.projects)
+        }
+
+        listContent.add(panel)
+        contentPanel.validate()
+        contentPanel.repaint()
+    }
+
+    private fun createIdlePanel(): JPanel {
+        return JPanel()
+    }
+
+    private fun createErrorPanel(): JPanel {
+        val constraints = GridBagConstraints()
+        constraints.gridx = 0
+        constraints.gridy = 0
+        constraints.weightx = 1.0
+        constraints.weighty = 1.0
+        constraints.anchor = GridBagConstraints.CENTER
+        val jPanel = JPanel().apply {
+            layout = GridBagLayout()
+        }
+        jPanel.add(JLabel("Network error, check your internet or gitlab access.").apply {
+            this@GitlabProjectsWindow.applyNetworkErrorIcon(this)
+        }, constraints)
+        return jPanel
+    }
+
+    private fun createProjectListPanel(projects: List<CompositeProject>): JScrollPane {
         val rootNode = DefaultMutableTreeNode("Projects")
         // Create child nodes
         projects.forEach { compositeProject ->
@@ -222,14 +251,7 @@ class GitlabProjectsWindow : ToolWindowFactory {
 
             }
         }
-
-
-        val scrollPane = JScrollPane(tree)
-
-        listContent.add(scrollPane)
-
-        contentPanel.validate()
-        contentPanel.repaint()
+        return JScrollPane(tree)
     }
 
     private fun updateDetailPanel(detailState: MainWindowViewModel.DetailState?) {

@@ -1,14 +1,15 @@
 package com.netatmo.gitlabplugin.viewmodel
 
+import com.netatmo.gitlabplugin.model.DataState
 import com.netatmo.gitlabplugin.model.GitlabProject
 import com.netatmo.gitlabplugin.model.PageInfo
 import com.netatmo.gitlabplugin.model.ProjectRelease
 import com.netatmo.gitlabplugin.repository.CompositeProjectRepository
 import com.netatmo.gitlabplugin.repository.GroupsRepository
 import com.netatmo.gitlabplugin.repository.ProjectFavoriteRepository
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.*
 
 class MainWindowViewModel {
 
@@ -26,18 +27,10 @@ class MainWindowViewModel {
 
     private val _favState = MutableStateFlow(false)
 
-    internal val toolbarState =
-        combine(
-            _favState,
-            compositeProjectRepository.loadingState,
-            compositeProjectRepository.pageFlow
-        ) { fav, loading, pageInfo ->
-            ToolbarState(loading = loading, favorite = fav, pageInfo = pageInfo)
-        }
 
-    val compositeProjectFlow = combine(
+    val dataStateFlow = combine(
         _favState,
-        compositeProjectRepository.compositeProjectFlow,
+        compositeProjectRepository.dataStateFlow,
         compositeProjectRepository.getFavProjects()
     ) { fav, projects, favs ->
         if (fav) {
@@ -45,7 +38,25 @@ class MainWindowViewModel {
         } else {
             projects
         }
-    }
+    }.stateIn(CoroutineScope(Dispatchers.Default), SharingStarted.WhileSubscribed(), DataState.Idle)
+
+    internal val toolbarState =
+        combine(
+            _favState,
+            dataStateFlow,
+        ) { fav, dataState ->
+            val loading = if (dataState is DataState.Success) {
+                dataState.isComplete.not()
+            } else {
+                false
+            }
+            val pageInfo = if (dataState is DataState.Success) {
+                dataState.data.pageInfo
+            } else {
+                null
+            }
+            ToolbarState(loading = loading, favorite = fav, pageInfo = pageInfo)
+        }
 
     internal val detailState = _detailState.combine(projectFavFlow) { detailState, favs ->
         detailState.copy(
@@ -78,14 +89,24 @@ class MainWindowViewModel {
     }
 
     internal fun fetchNextPage() {
-        _selectedGroupState.value?.let {
-            compositeProjectRepository.fetchNextPageByGroup(it)
+        val currentState = dataStateFlow.value
+        if (currentState is DataState.Success) {
+            _selectedGroupState.value?.let { group ->
+                currentState.data.pageInfo?.takeIf { it.current < it.total }?.let { pageInfo ->
+                    compositeProjectRepository.fetchByGroup(group, pageInfo.current + 1)
+                }
+            }
         }
     }
 
     internal fun fetchLastPage() {
-        _selectedGroupState.value?.let {
-            compositeProjectRepository.fetchLastPageByGroup(it)
+        val currentState = dataStateFlow.value
+        if (currentState is DataState.Success) {
+            _selectedGroupState.value?.let { group ->
+                currentState.data.pageInfo?.takeIf { it.current > 1 }?.let { pageInfo ->
+                    compositeProjectRepository.fetchByGroup(group, pageInfo.current - 1)
+                }
+            }
         }
     }
 
@@ -115,7 +136,10 @@ class MainWindowViewModel {
     }
 
     private fun getGitlabProject(projectId: Int): GitlabProject? {
-        return compositeProjectRepository.compositeProjectFlow.value.firstOrNull { it.gitlabProject.id == projectId }?.gitlabProject
+        return when (val state = compositeProjectRepository.dataStateFlow.value) {
+            is DataState.Success -> state.data.projects.firstOrNull { it.gitlabProject.id == projectId }?.gitlabProject
+            else -> null
+        }
     }
 
     private fun isFavorite(projectId: Int): Boolean {
